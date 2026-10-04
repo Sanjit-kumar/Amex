@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2. Architecture - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="on" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>2. Architecture</span></div>
+    <h1 class="title">2. Architecture</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><h2 id="system-context">System context</h2>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    subgraph People
+        MER[&quot;Merchant&quot;]
+        REV[&quot;Reviewer&quot;]
+        SAL[&quot;Sales&quot;]
+    end
+    subgraph App[&quot;Transaction Standardizer&quot;]
+        UP[&quot;Upload page&quot;]
+        RV[&quot;Review page&quot;]
+        API[&quot;Backend API (FastAPI)&quot;]
+        PIPE[&quot;Pipeline&lt;br/&gt;three AI levels + validation&quot;]
+        RAW[(&quot;Raw store&lt;br/&gt;original files, never modified&quot;)]
+        DB[(&quot;Database&lt;br/&gt;records and versions&quot;)]
+        CUR[(&quot;Curated store&lt;br/&gt;approved CSV&quot;)]
+    end
+    LLM[&quot;AI models&lt;br/&gt;Claude / Gemini / Grok&lt;br/&gt;(inside Amex secure environment)&quot;]
+
+    MER --&gt; UP --&gt; API
+    REV --&gt; RV --&gt; API
+    API --&gt; RAW
+    API --&gt; PIPE
+    PIPE &lt;--&gt; LLM
+    PIPE --&gt; DB
+    API &lt;--&gt; DB
+    DB --&gt; CUR --&gt; SAL
+</pre></div>
+<h2 id="components">Components</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>File (in <code>standardizer/</code>)</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Upload page</td>
+<td><code>static/index.html</code></td>
+<td>Drop files, show progress. No editing here</td>
+</tr>
+<tr>
+<td>Review page</td>
+<td><code>static/review.html</code></td>
+<td>List all records, filter, bulk approve, side-by-side edit</td>
+</tr>
+<tr>
+<td>Shared UI code</td>
+<td><code>static/common.js</code>, <code>style.css</code></td>
+<td>Header, user selector, API helper</td>
+</tr>
+<tr>
+<td>Backend API</td>
+<td><code>app.py</code></td>
+<td>Upload, list, edit, approve/reject, bulk, export</td>
+</tr>
+<tr>
+<td>Pipeline</td>
+<td><code>pipeline.py</code></td>
+<td>File-type detection, three AI levels, orchestration</td>
+</tr>
+<tr>
+<td>AI clients</td>
+<td><code>llm.py</code></td>
+<td>One function per provider, uses the calling user's credentials</td>
+</tr>
+<tr>
+<td>Mapping and coercion</td>
+<td><code>mapping.py</code></td>
+<td>Standard schema, alias table, date/amount/card normalization</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td><code>validators.py</code></td>
+<td>Deterministic checks. No AI</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td><code>storage.py</code></td>
+<td>Raw files, SQLite, versions, curated CSV</td>
+</tr>
+<tr>
+<td>Config</td>
+<td><code>config.py</code>, <code>config.json</code></td>
+<td>Per-user credentials and which model runs each level</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="request-flow-for-an-upload">Request flow for an upload</h2>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    A[&quot;POST /api/upload&quot;] --&gt; B[&quot;Save raw file untouched&lt;br/&gt;data/raw/id/name&quot;]
+    B --&gt; C[&quot;Create file row: status processing&quot;]
+    C --&gt; D[&quot;Background task: pipeline.process_file&quot;]
+    D --&gt; E{&quot;Detect type&quot;}
+    E --&gt;|&quot;image / scanned PDF&quot;| L1[&quot;Level 1 vision&quot;]
+    E --&gt;|&quot;CSV / Excel / JSON with known headers&quot;| FP[&quot;Fast path: deterministic mapping&quot;]
+    E --&gt;|&quot;text / PDF with text / other&quot;| L2[&quot;Level 2 text&quot;]
+    L1 --&gt; L2
+    L2 --&gt; L3[&quot;Level 3 convert&quot;]
+    FP --&gt; V
+    L3 --&gt; V[&quot;Coerce + validate (plain code)&quot;]
+    V --&gt; W[&quot;Write records as version 1&quot;]
+    W --&gt; S[&quot;File status: review&quot;]
+    D -. &quot;any exception&quot; .-&gt; F[&quot;File status: failed + error shown in UI&quot;]
+</pre></div>
+<h2 id="technology-choices">Technology choices</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Prototype</th>
+<th>Why</th>
+<th>Production candidate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td>Python, FastAPI</td>
+<td>Best AI and document-processing libraries</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>Plain HTML + JavaScript, no build step</td>
+<td>Runs with zero setup, easy to read</td>
+<td>React + TypeScript if the UI grows</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>SQLite</td>
+<td>Zero setup</td>
+<td>PostgreSQL</td>
+</tr>
+<tr>
+<td>Raw files</td>
+<td>Local folder</td>
+<td>Zero setup</td>
+<td>S3 / GCS with object lock (immutable)</td>
+</tr>
+<tr>
+<td>Queue</td>
+<td>FastAPI background task</td>
+<td>Simple</td>
+<td>SQS / Pub/Sub with retries</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>User dropdown</td>
+<td>Prototype only</td>
+<td>Amex SSO</td>
+</tr>
+<tr>
+<td>AI access</td>
+<td>Local Claude Code CLI, or API keys</td>
+<td>Local testing</td>
+<td>Approved model endpoints per user</td>
+</tr>
+</tbody>
+</table></div>
+<div class="panel warning"><div class="picon">!</div><div class="pbody"><div class="ptitle">Warning</div><p>Several prototype choices are deliberately simple and <strong>must be replaced</strong> for production: the user dropdown (no
+authentication), SQLite, in-process background tasks (lost on restart), and plaintext keys in <code>config.json</code>.
+See <a href="06-config-security.html">Configuration and security</a>.</p></div></div>
+<h2 id="design-decisions">Design decisions</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Reasoning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Validation is plain code, not AI</td>
+<td>It decides what a human must look at, so it has to be deterministic and explainable</td>
+</tr>
+<tr>
+<td>Structured files skip the AI</td>
+<td>Mapping known headers in code is exact, instant and free. Most volume is probably structured</td>
+</tr>
+<tr>
+<td>Raw files are never modified</td>
+<td>Reviewers and auditors can always see exactly what the merchant sent</td>
+</tr>
+<tr>
+<td>Edits create versions, never overwrites</td>
+<td>Keeps the AI original (v1) for accuracy measurement and an audit trail</td>
+</tr>
+<tr>
+<td>UI and access control are not agents</td>
+<td>Login, roles and the approve button must be predictable</td>
+</tr>
+<tr>
+<td>Provider per level is configuration</td>
+<td>Models can be swapped after benchmarking without code changes</td>
+</tr>
+</tbody>
+</table></div></article>
+    <div class="pager"><a class="prev" href="01-problem-and-goals.html"><small>&larr; Previous</small><br>1. Problem and goals</a><a class="next" href="03-pipeline.html"><small>Next &rarr;</small><br>3. AI pipeline</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#system-context">System context</a><a href="#components">Components</a><a href="#request-flow-for-an-upload">Request flow for an upload</a><a href="#technology-choices">Technology choices</a><a href="#design-decisions">Design decisions</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

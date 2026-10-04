@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transaction Standardizer: Documentation Home - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="on" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a></div>
+    <h1 class="title">Transaction Standardizer: Documentation Home</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><div class="tablewrap"><table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Status</strong></td>
+<td>Working prototype, runs locally. Not production.</td>
+</tr>
+<tr>
+<td><strong>Owner</strong></td>
+<td>Sanjit Das / (add team owner)</td>
+</tr>
+<tr>
+<td><strong>Audience</strong></td>
+<td>Engineers and reviewers new to the project</td>
+</tr>
+<tr>
+<td><strong>Last updated</strong></td>
+<td>2026-10-04</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="pages">Pages</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Page</th>
+<th>What you will learn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><a href="01-problem-and-goals.html">Problem and goals</a></td>
+<td>How the process works today, what we are replacing, how we measure success</td>
+</tr>
+<tr>
+<td>2</td>
+<td><a href="02-architecture.html">Architecture</a></td>
+<td>Components, tech stack, prototype vs. production mapping</td>
+</tr>
+<tr>
+<td>3</td>
+<td><a href="03-pipeline.html">AI pipeline</a></td>
+<td>The three AI levels, the fast path, sequence of one upload</td>
+</tr>
+<tr>
+<td>4</td>
+<td><a href="04-data-model.html">Data model and validation</a></td>
+<td>The standard schema, versioning, status lifecycles, validation rules</td>
+</tr>
+<tr>
+<td>5</td>
+<td><a href="05-review-ui.html">Review UI</a></td>
+<td>The two browser pages and how a reviewer works</td>
+</tr>
+<tr>
+<td>6</td>
+<td><a href="06-config-security.html">Configuration and security</a></td>
+<td>Per-user AI credentials, card-number handling, SSO</td>
+</tr>
+<tr>
+<td>7</td>
+<td><a href="07-roadmap-and-open-questions.html">Roadmap and open questions</a></td>
+<td>Phases, risks, decisions we still need</td>
+</tr>
+<tr>
+<td>8</td>
+<td><a href="08-run-locally.html">Run it locally</a></td>
+<td>Setup, tests, API reference</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="the-idea-in-one-paragraph">The idea in one paragraph</h2>
+<p>Merchants send us transaction records in whatever format they have. Today a team of about 50 people converts each one
+by hand into the Amex standard CSV and checks every transaction before sales uses it. This project replaces the
+manual conversion with AI agents and keeps one human step: a reviewer compares the original file with the
+standardized result, fixes anything wrong, and approves it. Only approved data reaches the sales team.</p>
+<h2 id="glossary">Glossary</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Standard format</strong></td>
+<td>The fixed set of 13 transaction fields every record is converted to (<a href="04-data-model.html#standard-schema">schema</a>)</td>
+</tr>
+<tr>
+<td><strong>Level 1 / 2 / 3</strong></td>
+<td>The three AI stages: vision, text, convert (<a href="03-pipeline.html">pipeline</a>)</td>
+</tr>
+<tr>
+<td><strong>Fast path</strong></td>
+<td>Structured files with recognizable headers are mapped by code, with no AI call</td>
+</tr>
+<tr>
+<td><strong>Record</strong></td>
+<td>One standardized transaction. A file contains one or many</td>
+</tr>
+<tr>
+<td><strong>Version</strong></td>
+<td>Every edit creates a new version. Version 1 is always the AI's original output</td>
+</tr>
+<tr>
+<td><strong>Curated store</strong></td>
+<td>The output of approved records only. This is what sales consumes</td>
+</tr>
+<tr>
+<td><strong>Mock mode</strong></td>
+<td>Demo mode used when no AI credentials are configured. It must be off in real use</td>
+</tr>
+</tbody>
+</table></div>
+<div class="panel tip"><div class="picon">✓</div><div class="pbody"><div class="ptitle">Tip</div><p>Diagrams are written in <a href="https://mermaid.js.org/">Mermaid</a> and render automatically on GitHub. In VS Code, install
+the "Markdown Preview Mermaid Support" extension to see them locally.</p></div></div></article>
+    <div class="pager"><span></span><a class="next" href="01-problem-and-goals.html"><small>Next &rarr;</small><br>1. Problem and goals</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#pages">Pages</a><a href="#the-idea-in-one-paragraph">The idea in one paragraph</a><a href="#glossary">Glossary</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

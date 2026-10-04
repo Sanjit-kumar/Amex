@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4. Data model and validation - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="on" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>4. Data model and validation</span></div>
+    <h1 class="title">4. Data model and validation</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><p>Sources: <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/mapping.py"><code>mapping.py</code></a>, <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/validators.py"><code>validators.py</code></a>,
+<a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/storage.py"><code>storage.py</code></a></p>
+<h2 id="standard-schema">Standard schema</h2>
+<p>Every transaction becomes one record with these 13 fields. A field with no data is stored as empty, never guessed.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type / format</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>transaction_id</code></td>
+<td>string</td>
+<td><span class="lozenge opt">no</span></td>
+<td>Receipt, invoice or transaction number</td>
+</tr>
+<tr>
+<td><code>merchant_name</code></td>
+<td>string</td>
+<td><span class="lozenge req">yes</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>merchant_category</code></td>
+<td>string</td>
+<td><span class="lozenge opt">no</span></td>
+<td>For example restaurant, hotel, florist. Often inferred, so usually lower confidence</td>
+</tr>
+<tr>
+<td><code>transaction_date</code></td>
+<td><code>YYYY-MM-DD</code></td>
+<td><span class="lozenge req">yes</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>transaction_time</code></td>
+<td><code>HH:MM:SS</code> (24h)</td>
+<td><span class="lozenge opt">no</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>number</td>
+<td><span class="lozenge req">yes</span></td>
+<td>Negative for refunds. Parentheses, <code>CR</code> and <code>refund</code> are read as negative</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>ISO 4217, for example <code>USD</code></td>
+<td><span class="lozenge req">yes</span></td>
+<td>Inferred from a symbol such as <code>$</code> when absent, at lower confidence</td>
+</tr>
+<tr>
+<td><code>card_network</code></td>
+<td>Visa, Mastercard, Amex, Discover, other</td>
+<td><span class="lozenge opt">no</span></td>
+<td>Detected from the card number prefix when a full number is present</td>
+</tr>
+<tr>
+<td><code>card_last4</code></td>
+<td>4 digits</td>
+<td><span class="lozenge opt">warn if missing</span></td>
+<td>Full card numbers are never stored in standardized data</td>
+</tr>
+<tr>
+<td><code>bank_name</code></td>
+<td>string</td>
+<td><span class="lozenge opt">no</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>payment_method</code></td>
+<td>credit, debit, cash, other</td>
+<td><span class="lozenge opt">no</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td><span class="lozenge opt">no</span></td>
+<td></td>
+</tr>
+<tr>
+<td><code>reference</code></td>
+<td>string</td>
+<td><span class="lozenge opt">no</span></td>
+<td>Authorization code or order number</td>
+</tr>
+</tbody>
+</table></div>
+<p>Besides the 13 fields, each record carries a <strong>confidence</strong> (0 to 1) and a <strong>source snippet</strong> per field. The source
+snippet is the exact text the value came from, and it powers the highlight in the Review page.</p>
+<h2 id="entities">Entities</h2>
+<div class="diagram"><pre class="mermaid">erDiagram
+    FILES ||--o{ RECORDS : &quot;contains&quot;
+    RECORDS ||--|{ VERSIONS : &quot;has history&quot;
+
+    FILES {
+        int id PK
+        string name
+        string mime
+        string path &quot;raw file on disk&quot;
+        string owner &quot;user who uploaded&quot;
+        string status &quot;processing / review / done / failed&quot;
+        json log &quot;pipeline steps&quot;
+        text extracted_text
+        string error
+        string created
+    }
+    RECORDS {
+        int id PK
+        int file_id FK
+        int idx &quot;position within the file&quot;
+        string status &quot;pending / approved / rejected&quot;
+        int current_version
+        string decided_by
+        string decided_at
+    }
+    VERSIONS {
+        int id PK
+        int record_id FK
+        int version &quot;1 is the AI original&quot;
+        json data &quot;the 13 fields&quot;
+        json conf &quot;confidence per field&quot;
+        json source &quot;source snippet per field&quot;
+        json issues &quot;validation results&quot;
+        string edited_by &quot;AI or a user&quot;
+        string note
+        string created
+    }
+</pre></div>
+<h2 id="versioning">Versioning</h2>
+<ul>
+<li>Version 1 is written by the pipeline with <code>edited_by = AI</code>. It is never changed.</li>
+<li>Each human edit adds a new version with the editor's name. The record's <code>current_version</code> points to the latest.</li>
+<li>Editing an approved or rejected record sends it <strong>back to pending</strong> so it must be approved again.</li>
+<li>Comparing v1 with the approved version gives the accuracy metric described in
+  <a href="01-problem-and-goals.html#success-metrics-proposed">Problem and goals</a>.</li>
+</ul>
+<h2 id="status-lifecycles">Status lifecycles</h2>
+<p><strong>Record</strong></p>
+<div class="diagram"><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; pending: pipeline creates version 1
+    pending --&gt; approved: Approve (only if no errors)
+    pending --&gt; rejected: Reject
+    approved --&gt; pending: Reopen or any edit
+    rejected --&gt; pending: Reopen or any edit
+    pending --&gt; pending: Save edits (new version)
+</pre></div>
+<p><strong>File</strong></p>
+<div class="diagram"><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; processing: upload
+    processing --&gt; review: records created
+    processing --&gt; failed: error
+    failed --&gt; processing: Retry
+    review --&gt; done: no pending records left
+    done --&gt; review: a record is reopened or edited
+</pre></div>
+<h2 id="validation-rules">Validation rules</h2>
+<p>All rules run in plain code, on AI output and again on every human edit, so an edit cannot bypass a check.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Severity</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Error</strong> (blocks approval)</td>
+<td><code>merchant_name</code>, <code>transaction_date</code>, <code>amount</code> or <code>currency</code> is missing</td>
+</tr>
+<tr>
+<td><strong>Error</strong></td>
+<td>Date is not <code>YYYY-MM-DD</code> after normalization</td>
+</tr>
+<tr>
+<td><strong>Error</strong></td>
+<td>Amount is not a number</td>
+</tr>
+<tr>
+<td><strong>Error</strong></td>
+<td>Currency is not a 3-letter code</td>
+</tr>
+<tr>
+<td><strong>Error</strong></td>
+<td><code>card_last4</code> is present but not exactly 4 digits</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Date is in the future or before the year 2000</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Amount is zero or above 100,000</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td><code>card_last4</code> is missing</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Time is not <code>HH:MM:SS</code></td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Any field with extraction confidence below 0.70</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Possible duplicate: same merchant, date, amount and card within the same file</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>Ambiguous day/month order in a slash date</td>
+</tr>
+<tr>
+<td>Info</td>
+<td>A full card number was found in the source and reduced to the last 4 digits</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td>A full card number failed the Luhn check</td>
+</tr>
+</tbody>
+</table></div>
+<p>Records with errors cannot be approved, individually or in bulk. Bulk approve skips them and reports how many.</p></article>
+    <div class="pager"><a class="prev" href="03-pipeline.html"><small>&larr; Previous</small><br>3. AI pipeline</a><a class="next" href="05-review-ui.html"><small>Next &rarr;</small><br>5. Review UI</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#standard-schema">Standard schema</a><a href="#entities">Entities</a><a href="#versioning">Versioning</a><a href="#status-lifecycles">Status lifecycles</a><a href="#validation-rules">Validation rules</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

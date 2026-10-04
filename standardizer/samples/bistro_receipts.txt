@@ -1,0 +1,10 @@
+Merchant: Blue Bistro
+Date: March 3, 2026
+Time: 7:42 PM
+Total: $88.20
+Card: Mastercard ending 9999
+
+Merchant: Blue Bistro
+Date: March 3, 2026
+Total: $23.10
+Card: Visa ending 1234

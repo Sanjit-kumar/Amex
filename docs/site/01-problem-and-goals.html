@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1. Problem and goals - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="on" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>1. Problem and goals</span></div>
+    <h1 class="title">1. Problem and goals</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><h2 id="today-as-is">Today (as-is)</h2>
+<p>Amex collects payment-transaction records from many kinds of businesses: restaurants, hotels, boutiques, florists.
+They upload in any format and with any layout.</p>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    A[&quot;Merchant uploads records&lt;br/&gt;image, PDF, text, JSON, Excel, free-form&quot;] --&gt; B[&quot;Data team (about 50 people)&lt;br/&gt;read each file by hand&quot;]
+    B --&gt; C[&quot;Convert to Amex standard CSV&quot;]
+    C --&gt; D[&quot;Verify every transaction by hand&lt;br/&gt;date, time, bank, card, amount&quot;]
+    D --&gt; E[&quot;Hand over to Sales&quot;]
+    E --&gt; F[&quot;Sales pitches the merchant:&lt;br/&gt;&#x27;had you used Amex you would have saved X&#x27;&quot;]
+</pre></div>
+<p><strong>Pain points</strong></p>
+<ul>
+<li>Large manual effort for work that is mostly reading and re-typing.</li>
+<li>Slow turnaround between a merchant upload and a usable record.</li>
+<li>Inconsistent conversion between people, and errors that are hard to trace.</li>
+</ul>
+<h2 id="target-to-be">Target (to-be)</h2>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    A[&quot;Merchant uploads records&lt;br/&gt;any format&quot;] --&gt; B[&quot;AI agents extract&lt;br/&gt;and standardize automatically&quot;]
+    B --&gt; C[(&quot;Standardized data store&quot;)]
+    C --&gt; D[&quot;Human reviewer&lt;br/&gt;compares raw vs. standardized&lt;br/&gt;edits, approves&quot;]
+    D --&gt; E[(&quot;Curated store&lt;br/&gt;approved only&quot;)]
+    E --&gt; F[&quot;Sales&quot;]
+    D -. &quot;every edit saved as a new version&quot; .-&gt; C
+</pre></div>
+<p>The manual conversion step disappears. One human check remains, so accuracy is controlled by a person, not assumed.</p>
+<h2 id="goals">Goals</h2>
+<ul>
+<li>Accept any file format without per-merchant parsers.</li>
+<li>Produce one consistent standard record per transaction.</li>
+<li>Keep a human in the loop: nothing reaches sales unapproved.</li>
+<li>Show the raw file next to the standardized data so checking is fast.</li>
+<li>Keep a full audit trail: who changed what, and what the AI originally said.</li>
+</ul>
+<h2 id="non-goals-for-now">Non-goals (for now)</h2>
+<ul>
+<li>Pitching or savings calculations. Sales still does this from the curated data.</li>
+<li>Real-time processing guarantees. Files are processed in the background.</li>
+<li>Replacing the human approval step.</li>
+</ul>
+<h2 id="success-metrics-proposed">Success metrics (proposed)</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>How to measure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field-level accuracy of AI output</td>
+<td>Compare v1 (AI) against the final approved version on a labeled test set</td>
+</tr>
+<tr>
+<td>Share of records approved with no edits</td>
+<td>Count records where approved version = version 1</td>
+</tr>
+<tr>
+<td>Reviewer time per record</td>
+<td>Time from opening a record to approving it</td>
+</tr>
+<tr>
+<td>Turnaround</td>
+<td>Upload time to approved time</td>
+</tr>
+<tr>
+<td>Manual effort removed</td>
+<td>Reviewer headcount and hours vs. the current team</td>
+</tr>
+</tbody>
+</table></div>
+<div class="panel important"><div class="picon">!</div><div class="pbody"><div class="ptitle">Important</div><p>The most valuable early step is a <strong>labeled test set</strong>: 100 to 200 real merchant files with the correct standardized
+output, produced by the current team. It is how we compare models and prove accuracy. See
+<a href="07-roadmap-and-open-questions.html">Roadmap</a>.</p></div></div></article>
+    <div class="pager"><a class="prev" href="index.html"><small>&larr; Previous</small><br>Transaction Standardizer: Documentation Home</a><a class="next" href="02-architecture.html"><small>Next &rarr;</small><br>2. Architecture</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#today-as-is">Today (as-is)</a><a href="#target-to-be">Target (to-be)</a><a href="#goals">Goals</a><a href="#non-goals-for-now">Non-goals (for now)</a><a href="#success-metrics-proposed">Success metrics (proposed)</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

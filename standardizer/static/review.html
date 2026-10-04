@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review - Transaction Standardizer</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+.bar{display:flex;gap:10px;align-items:center;padding:12px 20px;flex-wrap:wrap}
+.tabs{display:flex;gap:4px}
+.tab{background:transparent;color:var(--ink);border:1px solid var(--line);padding:5px 12px}
+.tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(1100px,96vw);background:var(--bg);border-left:1px solid var(--line);box-shadow:-8px 0 30px rgba(0,0,0,.25);z-index:50;display:none;flex-direction:column}
+#drawer.open{display:flex}
+.dh{display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.dbody{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.dbody>div{overflow:auto;min-width:0}
+.ph{position:sticky;top:0;background:var(--panel);padding:7px 14px;border-bottom:1px solid var(--line);font-weight:600;z-index:2}
+#raw{padding:12px}#raw img{max-width:100%;border:1px solid var(--line)}#raw iframe{width:100%;height:80vh;border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:140px 1fr;gap:6px 10px;padding:12px 14px;align-items:center}
+.grid label{color:var(--mute);font-size:12px}.grid input{width:100%}
+.c-low input{border-color:var(--warn);background:var(--warnbg)}.c-err input{border-color:var(--err);background:var(--errbg)}
+.issues{padding:0 14px 10px;font-size:12px}.issues div{padding:2px 0}.i-error{color:var(--err)}.i-warn{color:var(--warn)}.i-info{color:var(--mute)}
+.acts{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap;position:sticky;bottom:0;background:var(--panel)}
+.hist{padding:8px 14px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
+@media(max-width:900px){.dbody{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header></header>
+
+<div class="bar">
+  <div class="tabs" id="tabs"></div>
+  <input id="q" placeholder="Search merchant, file, card..." style="width:240px">
+  <label class="mute"><input type="checkbox" id="clean"> only records without errors</label>
+  <span id="fileFilter" class="mute"></span>
+  <span style="margin-left:auto"></span>
+  <button class="good" id="bulkApprove" disabled>Approve selected</button>
+  <button class="bad" id="bulkReject" disabled>Reject selected</button>
+</div>
+
+<div class="card" style="margin:0 20px 30px"><table>
+  <thead><tr><th><input type="checkbox" id="all"></th><th>Status</th><th>Merchant</th><th>Date</th><th>Time</th><th class="num" style="text-align:right">Amount</th>
+    <th>Card</th><th>Checks</th><th>File</th></tr></thead>
+  <tbody id="rows"></tbody></table></div>
+
+<div id="drawer">
+  <div class="dh"><b id="dtitle"></b><span id="dstat"></span><span style="margin-left:auto"></span>
+    <button class="sec" id="prev">&larr; Prev</button><button class="sec" id="next">Next &rarr;</button>
+    <button class="sec" onclick="closeDrawer()">Close</button></div>
+  <div class="dbody"><div><div class="ph">Raw (as received)</div><div id="raw"></div></div>
+    <div><div class="ph">Standardized &mdash; edit anything that is wrong</div><div id="form"></div></div></div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+let all = [], tab = "pending", selected = new Set(), view = [], curId = null, dirty = false;
+const fileParam = new URLSearchParams(location.search).get("file");
+const fileCache = {}, SRC = {};
+const TABS = [["pending", "Needs review"], ["approved", "Approved"], ["rejected", "Rejected"], ["all", "All"]];
+
+async function load() {
+  all = await api("/api/records");
+  render();
+  if (curId && !dirty) { const r = all.find(x => x.id === curId); if (!r) closeDrawer(); }
+  refreshBadge();
+}
+function counts() { const c = {all: all.length}; for (const r of all) c[r.status] = (c[r.status] || 0) + 1; return c; }
+const errs = r => r.issues.filter(i => i.severity === "error").length;
+const warns = r => r.issues.filter(i => i.severity === "warn").length;
+
+function render() {
+  const c = counts();
+  $("tabs").innerHTML = TABS.map(([k, l]) => `<button class="tab ${tab === k ? "on" : ""}" onclick="setTab('${k}')">${l} (${c[k] || 0})</button>`).join("");
+  const q = $("q").value.trim().toLowerCase();
+  view = all.filter(r => (tab === "all" || r.status === tab)
+    && (!fileParam || String(r.file_id) === fileParam)
+    && (!$("clean").checked || !errs(r))
+    && (!q || [r.data.merchant_name, r.file, r.data.card_last4, r.data.transaction_id, r.data.description].join(" ").toLowerCase().includes(q)));
+  $("fileFilter").innerHTML = fileParam ? `Showing one file &middot; <a href="/review.html">show all</a>` : "";
+  selected = new Set([...selected].filter(id => view.some(r => r.id === id)));
+  $("rows").innerHTML = view.length ? view.map(r => {
+    const d = r.data, e = errs(r), w = warns(r);
+    const chips = (e ? `<span class="chip e">${e} error${e > 1 ? "s" : ""}</span>` : "") + (w ? `<span class="chip w">${w} warning${w > 1 ? "s" : ""}</span>` : "") + (!e && !w ? `<span class="chip g">clean</span>` : "");
+    return `<tr class="row" onclick="openRec(${r.id})"><td onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(r.id) ? "checked" : ""} onchange="pick(${r.id},this.checked)"></td>
+      <td><span class="pill s-${r.status}">${r.status}</span></td><td>${esc(d.merchant_name) || '<span class="mute">&mdash; missing</span>'}</td>
+      <td>${esc(d.transaction_date) || '<span class="mute">&mdash;</span>'}</td><td class="mute">${esc(d.transaction_time)}</td>
+      <td class="num">${d.amount != null ? esc(d.amount) + " " + esc(d.currency || "") : ""}</td>
+      <td>${esc([d.card_network, d.card_last4 ? "••" + d.card_last4 : ""].filter(Boolean).join(" "))}</td><td>${chips}</td>
+      <td class="mute" style="word-break:break-all">${esc(r.file)} #${r.idx + 1}</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">${tab === "pending" ? "Nothing waiting for review. Upload files on the Upload page." : "No records here."}</td></tr>`;
+  $("all").checked = view.length > 0 && view.every(r => selected.has(r.id));
+  bulkState();
+}
+function setTab(t) { tab = t; selected.clear(); render(); }
+function pick(id, on) { on ? selected.add(id) : selected.delete(id); bulkState(); }
+function bulkState() { const n = selected.size; $("bulkApprove").disabled = $("bulkReject").disabled = !n; $("bulkApprove").textContent = `Approve selected${n ? " (" + n + ")" : ""}`; $("bulkReject").textContent = `Reject selected${n ? " (" + n + ")" : ""}`; }
+$("all").onchange = e => { view.forEach(r => e.target.checked ? selected.add(r.id) : selected.delete(r.id)); render(); };
+$("q").oninput = render; $("clean").onchange = render;
+async function bulk(action) {
+  if (action === "reject" && !confirm(`Reject ${selected.size} record(s)?`)) return;
+  const r = await api("/api/records/bulk", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ids: [...selected], action})});
+  selected.clear(); await load();
+  if (r.skipped.length) alert(`${r.skipped.length} record(s) were NOT approved because they still have errors. Open them to fix.`);
+}
+$("bulkApprove").onclick = () => bulk("approve"); $("bulkReject").onclick = () => bulk("reject");
+
+// ---------- drawer ----------
+async function fileDetail(id, fresh) { if (fresh || !fileCache[id]) fileCache[id] = await api(`/api/files/${id}`); return fileCache[id]; }
+async function openRec(id, keepRaw) {
+  if (dirty && !confirm("You have unsaved edits that will be lost. Continue?")) return;
+  dirty = false; curId = id;
+  const row = all.find(r => r.id === id); if (!row) return;
+  const f = await fileDetail(row.file_id, true), rec = f.records.find(r => r.id === id);
+  SRC[id] = rec.source;
+  $("drawer").classList.add("open");
+  $("dtitle").textContent = `${f.name} · record ${rec.idx + 1}`;
+  $("dstat").innerHTML = `<span class="pill s-${rec.status}">${rec.status}</span> <span class="mute">v${rec.version} &middot; ${esc(rec.edited_by)}</span>`;
+  if (!keepRaw || $("raw").dataset.file !== String(f.id)) renderRaw(f);
+  renderForm(rec);
+  const i = view.findIndex(r => r.id === id);
+  $("prev").disabled = i <= 0; $("next").disabled = i < 0 || i >= view.length - 1;
+}
+function closeDrawer() { $("drawer").classList.remove("open"); curId = null; dirty = false; load(); }
+$("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
+function step(d) { const i = view.findIndex(r => r.id === curId); if (view[i + d]) openRec(view[i + d].id, true); }
+
+function renderRaw(f) {
+  const url = `/api/files/${f.id}/raw`, el = $("raw"); el.dataset.file = f.id;
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"].includes(f.ext)) el.innerHTML = `<img src="${url}">`;
+  else if (f.ext === ".pdf") el.innerHTML = `<iframe src="${url}"></iframe>`;
+  else if ([".xlsx", ".xlsm", ".tif", ".tiff", ".heic"].includes(f.ext)) el.innerHTML = `<div class="mute" style="margin-bottom:6px">Text view of the original (<a href="${url}">download original</a>)</div><pre id="rawtxt">${esc(f.extracted_text)}</pre>`;
+  else fetch(url).then(r => r.text()).then(t => { el.innerHTML = `<pre id="rawtxt">${esc(t)}</pre>`; });
+}
+function hl(rid, k) {
+  const pre = $("rawtxt"), snip = (SRC[rid] || {})[k]; if (!pre) return;
+  const t = pre.textContent, i = snip ? t.indexOf(snip) : -1;
+  if (i < 0) { pre.textContent = t; return; }
+  pre.innerHTML = esc(t.slice(0, i)) + "<mark id='hl'>" + esc(snip) + "</mark>" + esc(t.slice(i + snip.length));
+  $("hl").scrollIntoView({block: "center"});
+}
+function renderForm(r) {
+  const d = r.data, errF = new Set(r.issues.filter(i => i.severity === "error").map(i => i.field));
+  const rows = FIELDS.map(k => {
+    const lo = d[k] != null && (r.conf[k] ?? 1) < 0.7, cls = errF.has(k) ? "c-err" : lo ? "c-low" : "";
+    return `<label>${k}${r.conf[k] != null ? ` <small>(${Math.round(r.conf[k] * 100)}%)</small>` : ""}</label>
+      <div class="${cls}"><input data-k="${k}" value="${esc(d[k])}" oninput="dirty=true" onfocus="hl(${r.id},'${k}')"></div>`;
+  }).join("");
+  const iss = r.issues.map(i => `<div class="i-${i.severity}">● ${i.field}: ${esc(i.msg)}</div>`).join("") || `<div class="i-info">No issues found by the automatic checks.</div>`;
+  const blocked = r.issues.some(i => i.severity === "error");
+  $("form").innerHTML = `<div class="grid">${rows}</div><div class="issues">${iss}</div><div class="hist" id="hist"></div>
+    <div class="acts"><button onclick="save(${r.id})">Save edits</button>
+      <button class="good" ${blocked ? "disabled title='Fix the errors first'" : ""} onclick="act(${r.id},'approve')">Approve</button>
+      <button class="bad" onclick="act(${r.id},'reject')">Reject</button>
+      ${r.status !== "pending" ? `<button class="sec" onclick="act(${r.id},'reopen')">Reopen</button>` : ""}
+      <button class="sec" onclick="hist(${r.id})">History</button></div>`;
+}
+async function save(rid) {
+  const data = {}; document.querySelectorAll("#form input[data-k]").forEach(i => data[i.dataset.k] = i.value);
+  try { await api(`/api/records/${rid}`, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({data})}); dirty = false; await load(); await openRec(rid, true); }
+  catch (e) { alert(e.message); }
+}
+async function act(rid, a) {
+  if (dirty && !confirm("You have unsaved edits that will be lost. Continue?")) return;
+  const idx = view.findIndex(r => r.id === rid);
+  try { await api(`/api/records/${rid}/${a}`, {method: "POST"}); dirty = false; } catch (e) { alert(e.message); return; }
+  await load();
+  if (a === "reopen") return openRec(rid, true);
+  // after a decision, move on to the next record still in the list (keeps review flowing)
+  const next = view[idx] || view[idx - 1];
+  next ? openRec(next.id, true) : closeDrawer();
+}
+async function hist(rid) {
+  const v = await api(`/api/records/${rid}/versions`);
+  $("hist").innerHTML = "<b>History</b><br>" + v.map(x => {
+    const prev = v[x.version - 2]?.data, diff = prev ? FIELDS.filter(k => prev[k] !== x.data[k]).map(k => `${k}: ${prev[k] ?? ""} → ${x.data[k] ?? ""}`).join("; ") : "";
+    return `v${x.version} &middot; ${x.created.replace("T", " ")} &middot; ${esc(x.edited_by)} (${esc(x.note)})${diff ? "<br>&nbsp;&nbsp;" + esc(diff) : ""}`;
+  }).join("<br>");
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && curId) closeDrawer(); });
+initHeader("review").then(() => { load(); setInterval(() => { if (!curId) load(); }, 4000); });
+</script>
+</body>
+</html>

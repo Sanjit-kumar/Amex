@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6. Configuration and security - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="on" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>6. Configuration and security</span></div>
+    <h1 class="title">6. Configuration and security</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><p>Source: <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/config.py"><code>standardizer/config.py</code></a>, <code>standardizer/config.example.json</code></p>
+<h2 id="per-user-ai-credentials">Per-user AI credentials</h2>
+<p>Whoever is using the tool uses <strong>their own</strong> AI access. The user chosen in the UI is sent with every request, and the
+pipeline resolves that user's credentials for each level.</p>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    REQ[&quot;Request with user = alice&quot;] --&gt; CFG[&quot;config.json&quot;]
+    CFG --&gt; ST[&quot;stages: which provider and model per level&quot;]
+    CFG --&gt; US[&quot;users.alice.provider.api_key&quot;]
+    ST --&gt; RES{&quot;resolve(user, stage)&quot;}
+    US --&gt; RES
+    RES --&gt;|&quot;provider = claude_code&quot;| CLI[&quot;Local Claude Code login&lt;br/&gt;no key needed&quot;]
+    RES --&gt;|&quot;key found&quot;| LIVE[&quot;Call provider with alice&#x27;s key&quot;]
+    RES --&gt;|&quot;no key, mock off&quot;| ERR[&quot;Error shown to the user&quot;]
+    RES --&gt;|&quot;no key, mock on&quot;| MOCK[&quot;Mock engine (demo only)&lt;br/&gt;banner shown in the UI&quot;]
+</pre></div>
+<p><code>config.json</code> shape:</p>
+<pre><code class="language-json">{
+  &quot;stages&quot;: {
+    &quot;vision&quot;:  { &quot;provider&quot;: &quot;gemini&quot;,  &quot;model&quot;: &quot;...&quot; },
+    &quot;text&quot;:    { &quot;provider&quot;: &quot;claude&quot;,  &quot;model&quot;: &quot;...&quot; },
+    &quot;convert&quot;: { &quot;provider&quot;: &quot;grok&quot;,    &quot;model&quot;: &quot;...&quot; }
+  },
+  &quot;mock_when_no_key&quot;: false,
+  &quot;users&quot;: {
+    &quot;alice&quot;: {
+      &quot;gemini&quot;: { &quot;api_key&quot;: &quot;env:GEMINI_API_KEY&quot; },
+      &quot;claude&quot;: { &quot;api_key&quot;: &quot;env:ANTHROPIC_API_KEY&quot; },
+      &quot;grok&quot;:   { &quot;api_key&quot;: &quot;env:XAI_API_KEY&quot; }
+    }
+  }
+}
+</code></pre>
+<ul>
+<li>A key is either a literal string or <code>env:VAR_NAME</code> to read an environment variable.</li>
+<li>The file is re-read on every request, so edits apply without a restart. Environment variables are read from the
+  server process, so changing one needs a restart.</li>
+<li><code>config.json</code> is <strong>gitignored</strong>. Copy <code>config.example.json</code> to create yours.</li>
+<li>Set <code>mock_when_no_key</code> to <code>false</code> in any real use. Mock output is not real AI output.</li>
+<li>Model names in the example are placeholders. Use whatever your approved endpoints expose.</li>
+</ul>
+<h2 id="data-sensitivity">Data sensitivity</h2>
+<p>These files contain card details, banks and amounts.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Current behavior</th>
+<th>Production recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model access</td>
+<td>Assumed to run entirely inside the Amex secure environment</td>
+<td>Use only approved endpoints. Confirm which of Claude, Gemini and Grok are approved there</td>
+</tr>
+<tr>
+<td>Full card numbers</td>
+<td>Standardized data keeps only the last 4 digits. The <strong>raw file is stored as received</strong> and may still contain a full number</td>
+<td>Mask or tokenize before the model call and restrict access to raw files</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>API keys in plaintext in <code>config.json</code>, or environment variables</td>
+<td>Secrets manager. Never commit keys</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>A user dropdown. <strong>No authentication</strong></td>
+<td>Replace <code>current_user()</code> in <code>app.py</code> with Amex SSO and roles</td>
+</tr>
+<tr>
+<td>Audit</td>
+<td>Every version records who edited and when. Every approval records who and when</td>
+<td>Ship these records to the central audit system</td>
+</tr>
+<tr>
+<td>Raw file integrity</td>
+<td>Written once, never modified by the app</td>
+<td>Object storage with write-once (object lock)</td>
+</tr>
+<tr>
+<td>Access</td>
+<td>Anyone who can open the page can approve</td>
+<td>Roles: uploader, reviewer, approver, admin</td>
+</tr>
+</tbody>
+</table></div>
+<div class="panel caution"><div class="picon">×</div><div class="pbody"><div class="ptitle">Caution</div><p>The prototype has no authentication and must not be exposed on a network as is. It is meant for local testing.</p></div></div>
+<h2 id="local-testing-with-claude-code">Local testing with Claude Code</h2>
+<p>For local development the provider <code>claude_code</code> shells out to <code>claude -p</code>, using the developer's Claude Code login so
+no API key is needed. It is slower (each level is a separate CLI call) and counts against that subscription's usage.
+Switch a stage to <code>claude</code>, <code>gemini</code> or <code>grok</code> to use API keys instead.</p></article>
+    <div class="pager"><a class="prev" href="05-review-ui.html"><small>&larr; Previous</small><br>5. Review UI</a><a class="next" href="07-roadmap-and-open-questions.html"><small>Next &rarr;</small><br>7. Roadmap and open questions</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#per-user-ai-credentials">Per-user AI credentials</a><a href="#data-sensitivity">Data sensitivity</a><a href="#local-testing-with-claude-code">Local testing with Claude Code</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

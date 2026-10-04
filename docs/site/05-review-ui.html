@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5. Review UI - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="on" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>5. Review UI</span></div>
+    <h1 class="title">5. Review UI</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><p>The UI is two separate browser pages with distinct jobs.</p>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    subgraph P1[&quot;Page 1: Upload  (/)&quot;]
+        D[&quot;Drop files&quot;] --&gt; PR[&quot;Progress per file&lt;br/&gt;AI working, standardized, failed&quot;]
+        PR --&gt;|&quot;failed&quot;| RT[&quot;Retry&quot;]
+    end
+    subgraph P2[&quot;Page 2: Review and Approve  (/review.html)&quot;]
+        LST[&quot;List of all records&lt;br/&gt;tabs, search, filters&quot;] --&gt; ROW[&quot;Open a record&quot;]
+        LST --&gt; BULK[&quot;Bulk approve / reject&quot;]
+        ROW --&gt; DR[&quot;Side panel:&lt;br/&gt;raw file | editable fields&quot;]
+        DR --&gt; SAVE[&quot;Save edits&quot;]
+        DR --&gt; APP[&quot;Approve&quot;]
+        DR --&gt; REJ[&quot;Reject&quot;]
+        APP --&gt; NXT[&quot;Move to next record&quot;]
+    end
+    PR --&gt;|&quot;Review link&quot;| LST
+    APP --&gt; OUT[(&quot;approved_transactions.csv&quot;)]
+    BULK --&gt; OUT
+</pre></div>
+<h2 id="page-1-upload">Page 1: Upload</h2>
+<ul>
+<li>Drag and drop or click to choose. Several files at once is fine.</li>
+<li>Shows each file with a live status. While running it shows the current step, for example "L2 text: ...".</li>
+<li>Nothing to edit here. Work on the file continues automatically in the background, about 15 to 60 seconds per file
+  with the local Claude Code CLI.</li>
+<li>A failed file shows the reason and a <strong>Retry</strong> button.</li>
+</ul>
+<h2 id="page-2-review-and-approve">Page 2: Review and Approve</h2>
+<p><strong>List</strong></p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tabs</td>
+<td>Needs review, Approved, Rejected, All, each with a count. The nav badge shows the pending count</td>
+</tr>
+<tr>
+<td>Columns</td>
+<td>Status, merchant, date, time, amount and currency, card, checks (errors, warnings, clean), source file</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>Merchant, file name, card digits, transaction id, description</td>
+</tr>
+<tr>
+<td>Filter</td>
+<td>Only records without errors</td>
+</tr>
+<tr>
+<td>Bulk actions</td>
+<td>Tick rows, then Approve selected or Reject selected. Records with errors are skipped and reported</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Side panel (click a row)</strong></p>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    OPEN[&quot;Open record&quot;] --&gt; SEE[&quot;Left: raw file as received&lt;br/&gt;image, PDF, or text&lt;br/&gt;Right: 13 editable fields&quot;]
+    SEE --&gt; HL[&quot;Click a field: the matching text&lt;br/&gt;is highlighted in the raw text&quot;]
+    SEE --&gt; FLAG[&quot;Red = error, amber = low confidence&lt;br/&gt;issues listed under the fields&quot;]
+    FLAG --&gt; FIX[&quot;Reviewer corrects values&quot;]
+    FIX --&gt; SAVE[&quot;Save edits&lt;br/&gt;re-validated, saved as new version&quot;]
+    SAVE --&gt; CHK{&quot;Errors left?&quot;}
+    CHK --&gt;|&quot;yes&quot;| FIX
+    CHK --&gt;|&quot;no&quot;| APP[&quot;Approve enabled&quot;]
+    APP --&gt; DONE[&quot;Status approved&lt;br/&gt;curated CSV updated&quot;]
+    DONE --&gt; NEXT[&quot;Next record opens automatically&quot;]
+</pre></div>
+<ul>
+<li><strong>Prev / Next</strong> walk the current list. <strong>Esc</strong> closes the panel.</li>
+<li><strong>History</strong> shows every version with who changed what, for example <code>merchant_name: Foo -&gt; Foo LLC</code>.</li>
+<li>Approving a record with errors is blocked in the UI and also rejected by the server.</li>
+</ul>
+<h2 id="output">Output</h2>
+<p>Approved records are written to <code>standardizer/data/curated/approved_transactions.csv</code> every time an approval or edit
+changes. The <strong>Export approved CSV</strong> button downloads the same file. Columns: record id, source file, the 13 standard
+fields, approved by, approved at.</p>
+<h2 id="known-limits-of-the-ui">Known limits of the UI</h2>
+<ul>
+<li>Field-to-source highlighting works for text. For images there is no bounding-box overlay yet, because that needs the
+  vision model to return coordinates.</li>
+<li>The highlight finds the first matching text, so a repeated value such as <code>USD</code> may highlight the wrong place.</li>
+<li>Identity is a dropdown. See <a href="06-config-security.html">Configuration and security</a>.</li>
+</ul></article>
+    <div class="pager"><a class="prev" href="04-data-model.html"><small>&larr; Previous</small><br>4. Data model and validation</a><a class="next" href="06-config-security.html"><small>Next &rarr;</small><br>6. Configuration and security</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#page-1-upload">Page 1: Upload</a><a href="#page-2-review-and-approve">Page 2: Review and Approve</a><a href="#output">Output</a><a href="#known-limits-of-the-ui">Known limits of the UI</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7. Roadmap and open questions - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="on" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>7. Roadmap and open questions</span></div>
+    <h1 class="title">7. Roadmap and open questions</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><h2 id="where-we-are">Where we are</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Upload page, review page, edit, versioning, approve/reject, bulk, export</td>
+<td>Working in the prototype</td>
+</tr>
+<tr>
+<td>Three AI levels</td>
+<td>Working end to end through the local Claude Code CLI on text and image samples</td>
+</tr>
+<tr>
+<td>Fast path for structured files</td>
+<td>Working</td>
+</tr>
+<tr>
+<td>Deterministic validation and tests</td>
+<td>Working. 9 automated end-to-end tests pass</td>
+</tr>
+<tr>
+<td>Live Claude / Gemini / Grok API clients</td>
+<td>Written, <strong>not yet run</strong> against real keys</td>
+</tr>
+<tr>
+<td>Authentication, production storage, queue</td>
+<td>Not started</td>
+</tr>
+<tr>
+<td>Accuracy measurement on real merchant data</td>
+<td>Not started</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="proposed-phases">Proposed phases</h2>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    P0[&quot;Phase 0&lt;br/&gt;Foundation&lt;br/&gt;schema agreed&lt;br/&gt;labeled test set&lt;br/&gt;approved models confirmed&quot;] --&gt; P1[&quot;Phase 1&lt;br/&gt;Structured files&lt;br/&gt;fast path + review UI&lt;br/&gt;SSO and storage&quot;]
+    P1 --&gt; P2[&quot;Phase 2&lt;br/&gt;Unstructured and images&lt;br/&gt;AI levels on real data&lt;br/&gt;model benchmark&quot;]
+    P2 --&gt; P3[&quot;Phase 3&lt;br/&gt;Shadow mode&lt;br/&gt;run beside the current team&lt;br/&gt;compare results&quot;]
+    P3 --&gt; P4[&quot;Phase 4&lt;br/&gt;Cut over&lt;br/&gt;reviewers replace manual conversion&lt;br/&gt;sample-based QA&quot;]
+</pre></div>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Exit criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 Foundation</td>
+<td>Standard schema signed off. 100 to 200 real files with correct output collected. Security confirms which models and storage are allowed</td>
+</tr>
+<tr>
+<td>1 Structured files</td>
+<td>Production login, database and object storage in place. Structured uploads standardized and approved end to end</td>
+</tr>
+<tr>
+<td>2 Unstructured and images</td>
+<td>Per-level model chosen from benchmark results. Accuracy on the test set meets the agreed target</td>
+</tr>
+<tr>
+<td>3 Shadow mode</td>
+<td>AI results compared with the team's results on live volume. Differences understood and fixed</td>
+</tr>
+<tr>
+<td>4 Cut over</td>
+<td>Manual conversion stopped. Reviewers approve AI output and QA samples a share of approved records</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="benchmark-plan-phase-0-and-2">Benchmark plan (Phase 0 and 2)</h2>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    SET[&quot;Labeled test set&lt;br/&gt;100-200 files + correct output&quot;] --&gt; RUN[&quot;Run each candidate model&lt;br/&gt;per level, same files&quot;]
+    RUN --&gt; SC[&quot;Score per field:&lt;br/&gt;exact match, by file type&quot;]
+    SC --&gt; CMP[&quot;Compare models and cost / time&quot;]
+    CMP --&gt; PICK[&quot;Choose a provider per level&lt;br/&gt;set in config.json&quot;]
+    PICK --&gt; TRK[&quot;Keep measuring in production:&lt;br/&gt;version 1 vs. approved version&quot;]
+</pre></div>
+<p>The default of Gemini for vision, Claude for text and Grok for conversion is a hypothesis, not a result. Gemini is
+expected to be strong on varied images and the other two on structured output, but the test set decides.</p>
+<h2 id="risks">Risks</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AI misreads a field and a reviewer misses it</td>
+<td>Required-field blocking, confidence flags, deterministic validation, raw-vs-standardized view, QA sampling</td>
+</tr>
+<tr>
+<td>Reviewer fatigue and rubber-stamping</td>
+<td>Show only flagged fields prominently. Measure approval-without-edit rates and audit samples</td>
+</tr>
+<tr>
+<td>Model quality varies by merchant format</td>
+<td>Benchmark by file type. Per-level model choice. Fast path for known structures</td>
+</tr>
+<tr>
+<td>Sensitive card data reaches a model or a log</td>
+<td>Mask before model calls, restrict raw access, confirm approved endpoints</td>
+</tr>
+<tr>
+<td>Vendor or model change breaks output</td>
+<td>Schema-constrained output, count checks, regression run on the labeled set</td>
+</tr>
+<tr>
+<td>Large files or volume spikes</td>
+<td>Chunking and batching today. Queue with retries and workers for production</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="open-questions">Open questions</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Needed for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>What is the official Amex standard format? Are these 13 fields complete, and what are the exact codes and value lists?</td>
+<td>Phase 0</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Which models are approved inside the Amex environment, and through which endpoints?</td>
+<td>Phase 0</td>
+</tr>
+<tr>
+<td>3</td>
+<td>What are the accuracy and latency targets, and the acceptable error rate after review?</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Who reviews, and what roles exist (uploader, reviewer, approver)? Is a second approver needed for large amounts?</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>5</td>
+<td>How do merchants upload in production: this page, SFTP, an API, email?</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>6</td>
+<td>How must raw files be retained and for how long? Can they hold full card numbers?</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Where does approved data go next: file drop, database, or an API into the sales tooling?</td>
+<td>Phase 1</td>
+</tr>
+<tr>
+<td>8</td>
+<td>How are duplicates across files and across merchants handled?</td>
+<td>Phase 2</td>
+</tr>
+<tr>
+<td>9</td>
+<td>What counts as "verify each transaction"? Is it only format and consistency, or matching against Amex's own records?</td>
+<td>Phase 2</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="backlog-ideas">Backlog ideas</h2>
+<ul>
+<li>Date-ambiguity flag for dates the AI already converted (currently lost).</li>
+<li>Image bounding boxes so a click on a field highlights the region on the picture.</li>
+<li>Per-merchant templates learned from approved edits, to raise the fast-path share.</li>
+<li>Side-by-side diff of version 1 vs. the current version in the History view.</li>
+<li>Reviewer metrics dashboard: approval-without-edit rate, time per record, top corrected fields.</li>
+</ul></article>
+    <div class="pager"><a class="prev" href="06-config-security.html"><small>&larr; Previous</small><br>6. Configuration and security</a><a class="next" href="08-run-locally.html"><small>Next &rarr;</small><br>8. Run it locally</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#where-we-are">Where we are</a><a href="#proposed-phases">Proposed phases</a><a href="#benchmark-plan-phase-0-and-2">Benchmark plan (Phase 0 and 2)</a><a href="#risks">Risks</a><a href="#open-questions">Open questions</a><a href="#backlog-ideas">Backlog ideas</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

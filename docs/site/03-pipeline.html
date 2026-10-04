@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3. AI pipeline - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="on" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>3. AI pipeline</span></div>
+    <h1 class="title">3. AI pipeline</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><p>Source: <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/pipeline.py"><code>standardizer/pipeline.py</code></a></p>
+<h2 id="the-three-levels">The three levels</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Default model</th>
+<th>Input</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. Vision</strong></td>
+<td>Gemini (configurable)</td>
+<td>Images, scanned PDFs</td>
+<td>Faithful text transcription of the document</td>
+</tr>
+<tr>
+<td><strong>2. Text</strong></td>
+<td>Claude (configurable)</td>
+<td>Any text, from any source</td>
+<td>A list of loose records, using the source's own labels</td>
+</tr>
+<tr>
+<td><strong>3. Convert</strong></td>
+<td>Grok (configurable)</td>
+<td>Loose records</td>
+<td>Standard-schema records, plus a confidence and a source snippet for every field</td>
+</tr>
+</tbody>
+</table></div>
+<p>Each level's provider and model is set in <code>config.json</code> under <code>stages</code>. They can all be the same model.</p>
+<div class="diagram"><pre class="mermaid">flowchart TD
+    IN[&quot;Uploaded file&quot;] --&gt; T{&quot;File type&quot;}
+    T --&gt;|&quot;png, jpg, webp, tiff, ...&quot;| L1[&quot;Level 1: vision&lt;br/&gt;image to text&quot;]
+    T --&gt;|&quot;pdf&quot;| P{&quot;Has text layer?&quot;}
+    P --&gt;|&quot;yes&quot;| TX[&quot;Extract text with pypdf&quot;]
+    P --&gt;|&quot;no, scan&quot;| L1
+    T --&gt;|&quot;csv, tsv, xlsx, json&quot;| H{&quot;Headers recognized?&lt;br/&gt;(3+ known fields incl. amount&lt;br/&gt;and a date or merchant)&quot;}
+    T --&gt;|&quot;txt and others&quot;| TX2[&quot;Read as text&quot;]
+    H --&gt;|&quot;yes&quot;| FAST[&quot;FAST PATH&lt;br/&gt;map by alias table&lt;br/&gt;no AI call&quot;]
+    H --&gt;|&quot;no&quot;| TX3[&quot;Convert to text&quot;]
+    L1 --&gt; L2
+    TX --&gt; L2
+    TX2 --&gt; L2
+    TX3 --&gt; L2[&quot;Level 2: text engine&lt;br/&gt;text to loose records&lt;br/&gt;(chunked ~12k chars)&quot;]
+    L2 --&gt; L3[&quot;Level 3: converter&lt;br/&gt;loose to standard schema&lt;br/&gt;(batches of 25)&quot;]
+    FAST --&gt; CO
+    L3 --&gt; CO[&quot;Coerce values&lt;br/&gt;dates, amounts, card digits&quot;]
+    CO --&gt; VA[&quot;Validate&lt;br/&gt;deterministic rules&quot;]
+    VA --&gt; OUT[(&quot;Records saved&lt;br/&gt;version 1, status pending&quot;)]
+</pre></div>
+<h2 id="why-a-fast-path">Why a fast path</h2>
+<p>CSV, Excel and JSON files whose column names we recognise (for example <code>Merchant</code>, <code>Date</code>, <code>Total</code>, <code>Card</code>) are
+mapped by an alias table in <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/mapping.py"><code>mapping.py</code></a>. That is exact, instant and costs nothing.
+Only files that need interpretation use the AI.</p>
+<div class="panel note"><div class="picon">i</div><div class="pbody"><div class="ptitle">Note</div><p>The alias table is a plain dictionary. Adding a merchant's unusual column name is a one-line change.</p></div></div>
+<h2 id="what-one-upload-looks-like">What one upload looks like</h2>
+<div class="diagram"><pre class="mermaid">sequenceDiagram
+    actor M as Merchant / uploader
+    participant UI as Upload page
+    participant API as Backend
+    participant P as Pipeline
+    participant AI as AI model
+    participant DB as Database
+    actor R as Reviewer
+    participant RV as Review page
+
+    M-&gt;&gt;UI: drop file
+    UI-&gt;&gt;API: POST /api/upload
+    API-&gt;&gt;API: store raw file untouched
+    API--&gt;&gt;UI: file id (status: processing)
+    API-&gt;&gt;P: background task
+    opt image or scanned PDF
+        P-&gt;&gt;AI: Level 1: transcribe
+        AI--&gt;&gt;P: text
+    end
+    P-&gt;&gt;AI: Level 2: extract loose records
+    AI--&gt;&gt;P: JSON records
+    P-&gt;&gt;AI: Level 3: convert to standard schema
+    AI--&gt;&gt;P: records + confidence + sources
+    P-&gt;&gt;P: coerce and validate (plain code)
+    P-&gt;&gt;DB: save records as version 1
+    UI-&gt;&gt;API: poll /api/files
+    API--&gt;&gt;UI: status review, N records
+    R-&gt;&gt;RV: open Review page
+    RV-&gt;&gt;API: GET /api/records
+    R-&gt;&gt;RV: check, edit, approve
+    RV-&gt;&gt;API: PUT edit / POST approve
+    API-&gt;&gt;DB: new version / status approved
+    API-&gt;&gt;API: refresh curated CSV
+</pre></div>
+<h2 id="prompts">Prompts</h2>
+<p>The prompts live in <a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/pipeline.py"><code>pipeline.py</code></a> as <code>VISION_PROMPT</code>, <code>TEXT_PROMPT</code>, <code>CONVERT_PROMPT</code>.</p>
+<ul>
+<li><strong>Vision</strong> asks for a faithful transcription and explicitly forbids summarizing or correcting.</li>
+<li><strong>Text</strong> asks for every transaction as a JSON array, keeping the source's own keys and not normalizing values.</li>
+<li><strong>Convert</strong> supplies the standard schema and asks for <code>{data, confidence, source}</code> per record, with null for
+  anything not present. It must never output a full card number.</li>
+</ul>
+<h2 id="behaviors-worth-knowing">Behaviors worth knowing</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Behavior</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Missing data is not guessed</td>
+<td>If a receipt has no date or merchant name, the field stays empty and is flagged as a required-field error</td>
+</tr>
+<tr>
+<td>Full card numbers</td>
+<td>Only the last 4 digits are kept in standardized data. A Luhn check runs on a full number if one is present</td>
+</tr>
+<tr>
+<td>Ambiguous dates</td>
+<td><code>03/04/2026</code> could be 3 April or 4 March. Deterministic parsing flags this. Dates the AI already converted to ISO lose that flag (known gap)</td>
+</tr>
+<tr>
+<td>Large files</td>
+<td>Text is split into ~12,000-character chunks for Level 2, and records are converted in batches of 25</td>
+</tr>
+<tr>
+<td>Count mismatch</td>
+<td>If Level 3 returns a different number of records than it was given, the file fails rather than saving misaligned data</td>
+</tr>
+<tr>
+<td>Failure</td>
+<td>Any exception sets the file to <code>failed</code>, logs the reason, and the Upload page offers Retry</td>
+</tr>
+<tr>
+<td>Retry limits</td>
+<td>A file with any approved or rejected record cannot be reprocessed</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="providers">Providers</h2>
+<p><a href="https://github.com/Sanjit-kumar/Amex/blob/main/standardizer/llm.py"><code>llm.py</code></a> has one function per provider behind <code>complete(provider, key, model, prompt, files)</code>.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Provider id</th>
+<th>How it calls</th>
+<th>Credential</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>claude</code></td>
+<td>Anthropic Messages API, images and PDFs as content blocks</td>
+<td>User's API key</td>
+</tr>
+<tr>
+<td><code>gemini</code></td>
+<td>Google <code>generateContent</code>, files as inline data</td>
+<td>User's API key</td>
+</tr>
+<tr>
+<td><code>grok</code></td>
+<td>xAI chat completions (OpenAI-compatible)</td>
+<td>User's API key</td>
+</tr>
+<tr>
+<td><code>claude_code</code></td>
+<td>Local <code>claude -p</code> CLI, files read via its Read tool</td>
+<td>The machine's Claude Code login</td>
+</tr>
+</tbody>
+</table></div>
+<div class="panel warning"><div class="picon">!</div><div class="pbody"><div class="ptitle">Warning</div><p>The <code>claude</code>, <code>gemini</code> and <code>grok</code> clients follow each vendor's documented REST API but have <strong>not yet been run
+against live keys</strong>. Only <code>claude_code</code> has been exercised end to end. Expect to adjust model names and details
+when real endpoints are connected.</p></div></div></article>
+    <div class="pager"><a class="prev" href="02-architecture.html"><small>&larr; Previous</small><br>2. Architecture</a><a class="next" href="04-data-model.html"><small>Next &rarr;</small><br>4. Data model and validation</a></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#the-three-levels">The three levels</a><a href="#why-a-fast-path">Why a fast path</a><a href="#what-one-upload-looks-like">What one upload looks like</a><a href="#prompts">Prompts</a><a href="#behaviors-worth-knowing">Behaviors worth knowing</a><a href="#providers">Providers</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>

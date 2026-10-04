@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upload - Transaction Standardizer</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+#drop{border:2px dashed var(--line);border-radius:12px;padding:44px 20px;text-align:center;cursor:pointer;background:var(--panel);transition:.15s}
+#drop.over{border-color:var(--brand);background:var(--hover)}
+#drop b{font-size:17px}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--mute);border-top-color:transparent;border-radius:50%;animation:s 1s linear infinite;vertical-align:-1px;margin-right:6px}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header></header>
+<div class="wrap">
+  <div id="drop"><b>Drop merchant files here</b><div class="mute" style="margin-top:6px">or click to choose &middot; images, PDF, Excel, CSV, JSON, text &middot; any format, any layout</div>
+    <input type="file" id="picker" multiple hidden></div>
+  <p class="mute">The AI agents read each file, extract every transaction and save it in the standard format automatically.
+     Nothing to do on this page. When files finish, verify them on the <a href="/review.html">Review &amp; Approve</a> page.</p>
+  <div class="card" style="margin-top:16px"><table>
+    <thead><tr><th>File</th><th>Status</th><th>Standardized records</th><th>Uploaded by</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="empty">No uploads yet</td></tr></tbody></table></div>
+</div>
+<script src="/common.js"></script>
+<script>
+const drop = $("drop"), picker = $("picker");
+drop.onclick = () => picker.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); send(e.dataTransfer.files); };
+picker.onchange = () => { send(picker.files); picker.value = ""; };
+
+async function send(files) {
+  if (!files.length) return;
+  const fd = new FormData(); for (const f of files) fd.append("files", f);
+  try { await api("/api/upload", {method: "POST", body: fd}); } catch (e) { alert(e.message); }
+  load();
+}
+async function retry(id) { try { await api(`/api/files/${id}/reprocess`, {method: "POST"}); } catch (e) { alert(e.message); } load(); }
+
+let lastLog = {};
+async function load() {
+  const fs = await api("/api/files");
+  if (!fs.length) return;
+  // latest progress line for files still running
+  for (const f of fs.filter(f => f.status === "processing")) {
+    try { const d = await api(`/api/files/${f.id}`); lastLog[f.id] = d.log.length ? d.log[d.log.length - 1].msg : ""; } catch {}
+  }
+  $("rows").innerHTML = fs.map(f => {
+    const n = Object.values(f.counts).reduce((a, b) => a + b, 0);
+    const st = f.status === "processing" ? `<span class="spin"></span>AI working<div class="mute" style="font-size:12px">${esc(lastLog[f.id] || "")}</div>`
+      : f.status === "failed" ? `<span class="pill s-failed">failed</span><div class="mute" style="font-size:12px;color:var(--err)">${esc(f.error)}</div>`
+      : `<span class="pill s-done">standardized</span>`;
+    const recs = f.status === "processing" || f.status === "failed" ? "" : `${n} record${n === 1 ? "" : "s"} <span class="mute">(${f.counts.approved || 0} approved)</span>`;
+    const act = f.status === "failed" ? `<button class="sec" onclick="retry(${f.id})">Retry</button>`
+      : f.status === "processing" ? "" : `<a href="/review.html?file=${f.id}">Review &rarr;</a>`;
+    return `<tr><td><b style="word-break:break-all">${esc(f.name)}</b></td><td>${st}</td><td>${recs}</td><td class="mute">${esc(f.owner)}</td><td>${act}</td></tr>`;
+  }).join("");
+  refreshBadge();
+}
+initHeader("upload").then(() => { load(); setInterval(load, 2500); });
+</script>
+</body>
+</html>

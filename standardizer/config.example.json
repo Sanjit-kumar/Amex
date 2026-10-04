@@ -1,0 +1,21 @@
+{
+  "_comment": "Copy to config.json. Each user's own AI subscription/API keys are used for their uploads. A key may be a literal or 'env:VAR_NAME' to read from an environment variable.",
+  "stages": {
+    "vision":  { "provider": "gemini", "model": "gemini-2.5-flash" },
+    "text":    { "provider": "claude", "model": "claude-sonnet-5-5" },
+    "convert": { "provider": "grok",   "model": "grok-4" }
+  },
+  "mock_when_no_key": true,
+  "users": {
+    "sanjit": {
+      "gemini": { "api_key": "" },
+      "claude": { "api_key": "" },
+      "grok":   { "api_key": "" }
+    },
+    "friend": {
+      "gemini": { "api_key": "env:GEMINI_API_KEY" },
+      "claude": { "api_key": "env:ANTHROPIC_API_KEY" },
+      "grok":   { "api_key": "env:XAI_API_KEY" }
+    }
+  }
+}

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8. Run it locally - Transaction Standardizer</title>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<header class="top"><div class="logo">&#9638; Transaction Standardizer</div><div class="space">Documentation space</div></header>
+<div class="layout">
+  <nav class="tree"><div class="tree-h">Pages</div><a class="" href="index.html">Transaction Standardizer: Documentation Home</a><a class="" href="01-problem-and-goals.html">1. Problem and goals</a><a class="" href="02-architecture.html">2. Architecture</a><a class="" href="03-pipeline.html">3. AI pipeline</a><a class="" href="04-data-model.html">4. Data model and validation</a><a class="" href="05-review-ui.html">5. Review UI</a><a class="" href="06-config-security.html">6. Configuration and security</a><a class="" href="07-roadmap-and-open-questions.html">7. Roadmap and open questions</a><a class="on" href="08-run-locally.html">8. Run it locally</a></nav>
+  <main>
+    <div class="crumbs"><a href="index.html">Transaction Standardizer</a> / <span>8. Run it locally</span></div>
+    <h1 class="title">8. Run it locally</h1>
+    <div class="meta">Project documentation &middot; Last built from Markdown source</div>
+    <article><h2 id="quick-start-nothing-to-configure">Quick start (nothing to configure)</h2>
+<pre><code class="language-bash">git clone https://github.com/Sanjit-kumar/Amex.git
+cd Amex/standardizer
+python start.py          # Windows: double-click run.bat   |   Mac/Linux: ./start.sh
+</code></pre>
+<p><code>start.py</code> does everything:</p>
+<ol>
+<li>Installs any missing Python packages.</li>
+<li>Creates <code>config.json</code> on first run and <strong>auto-detects how to reach an AI model</strong>:
+   - the Claude Code CLI on the machine: used with no API key (<code>claude_code</code>);
+   - otherwise an <code>ANTHROPIC_API_KEY</code> environment variable: used as the Claude API key;
+   - otherwise mock mode, which still handles structured files (CSV, Excel, JSON) and shows a banner.</li>
+<li>Starts the local web server (the backend and both pages are one program, so there is nothing else to run).</li>
+<li>Opens <a href="http://localhost:8000">http://localhost:8000</a> in the browser. If port 8000 is busy it uses the next free one and prints the address.</li>
+</ol>
+<p>Stop it with Ctrl+C. Requires Python 3.10 or newer. Nothing else.</p>
+<h3 id="changing-how-the-ai-runs-optional">Changing how the AI runs (optional)</h3>
+<p>The auto-detected setup is fine for trying it out. To use a different model or API keys, edit <code>config.json</code> and set the provider for each of the three stages:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Goal</th>
+<th><code>stages.*.provider</code></th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local testing, no API key</td>
+<td><code>claude_code</code></td>
+<td>Claude Code CLI logged in</td>
+</tr>
+<tr>
+<td>Anthropic API</td>
+<td><code>claude</code></td>
+<td><code>users.&lt;name&gt;.claude.api_key</code></td>
+</tr>
+<tr>
+<td>Google API</td>
+<td><code>gemini</code></td>
+<td><code>users.&lt;name&gt;.gemini.api_key</code></td>
+</tr>
+<tr>
+<td>xAI API</td>
+<td><code>grok</code></td>
+<td><code>users.&lt;name&gt;.grok.api_key</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>The user listed under <code>users</code> must match the user selected in the UI. Set <code>"mock_when_no_key": false</code>.</p>
+<h2 id="try-it">Try it</h2>
+<ol>
+<li>Open the Upload page and drop <code>samples/florist_orders.csv</code>. It is standardized instantly with no AI.</li>
+<li>Drop <code>samples/bistro_receipts.txt</code> or <code>samples/receipt_photo.png</code> to exercise the AI levels.</li>
+<li>Go to <strong>Review and Approve</strong>, open a record, compare, fix, approve.</li>
+<li>Find the result in <code>data/curated/approved_transactions.csv</code> or use <strong>Export approved CSV</strong>.</li>
+</ol>
+<h2 id="where-data-lives">Where data lives</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Path (under <code>standardizer/</code>)</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data/raw/&lt;id&gt;/&lt;file&gt;</code></td>
+<td>Original uploads, untouched</td>
+</tr>
+<tr>
+<td><code>data/amex.db</code></td>
+<td>SQLite: files, records, all versions</td>
+</tr>
+<tr>
+<td><code>data/curated/approved_transactions.csv</code></td>
+<td>Approved records only</td>
+</tr>
+</tbody>
+</table></div>
+<p>All of <code>data/</code> and <code>config.json</code> are gitignored.</p>
+<h2 id="tests">Tests</h2>
+<pre><code class="language-bash">python -m pytest tests -q
+</code></pre>
+<p>The 9 tests drive the real FastAPI app in a temporary folder with mock mode on, so they need no keys or network. They
+cover CSV fast path and validation flags, free text, nested JSON, an image with no vision key, edit versioning with
+approve and export, the approval gate, duplicate detection, and the review list with bulk approve.</p>
+<h2 id="api-reference">API reference</h2>
+<p>All endpoints except <code>/api/users</code> require the header <code>X-User: &lt;name&gt;</code> (a prototype stand-in for SSO).</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/users</code></td>
+<td>Names in <code>config.json</code></td>
+</tr>
+<tr>
+<td><code>GET /api/me</code></td>
+<td>Current user and which provider each stage uses</td>
+</tr>
+<tr>
+<td><code>POST /api/upload</code></td>
+<td>Multipart upload of one or more files. Returns file ids and starts processing</td>
+</tr>
+<tr>
+<td><code>GET /api/files</code></td>
+<td>All uploads with status and record counts</td>
+</tr>
+<tr>
+<td><code>GET /api/files/{id}</code></td>
+<td>One file: log, extracted text, records</td>
+</tr>
+<tr>
+<td><code>GET /api/files/{id}/raw</code></td>
+<td>The original file</td>
+</tr>
+<tr>
+<td><code>POST /api/files/{id}/reprocess</code></td>
+<td>Re-run the pipeline. Refused if any record is decided</td>
+</tr>
+<tr>
+<td><code>GET /api/records</code></td>
+<td>Every record across all files, for the review list</td>
+</tr>
+<tr>
+<td><code>PUT /api/records/{id}</code></td>
+<td>Save edits. Re-validated and stored as a new version</td>
+</tr>
+<tr>
+<td><code>POST /api/records/{id}/approve</code></td>
+<td>Approve. 422 if the record has errors</td>
+</tr>
+<tr>
+<td><code>POST /api/records/{id}/reject</code></td>
+<td>Reject</td>
+</tr>
+<tr>
+<td><code>POST /api/records/{id}/reopen</code></td>
+<td>Back to pending</td>
+</tr>
+<tr>
+<td><code>POST /api/records/bulk</code></td>
+<td><code>{ids, action}</code> for approve or reject. Records with errors are skipped</td>
+</tr>
+<tr>
+<td><code>GET /api/records/{id}/versions</code></td>
+<td>Full version history</td>
+</tr>
+<tr>
+<td><code>GET /api/export.csv</code></td>
+<td>Approved records as CSV</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Banner says a key is missing</td>
+<td>The stage uses <code>claude</code>, <code>gemini</code> or <code>grok</code> and the user has no key. Add it, or switch the stage to <code>claude_code</code></td>
+</tr>
+<tr>
+<td>Env var key not picked up</td>
+<td>Environment variables load when the server starts. Restart the server</td>
+</tr>
+<tr>
+<td>Image or scanned PDF fails with "needs a key"</td>
+<td>Mock mode cannot read images. Configure a real vision provider</td>
+</tr>
+<tr>
+<td>A file stays "AI working" for a long time</td>
+<td>The local CLI takes about 15 to 60 seconds per level. Check <code>server.log</code> and <code>server.err</code> if it never finishes</td>
+</tr>
+<tr>
+<td>Hard refresh needed after an update</td>
+<td>Browsers cache <code>common.js</code> and <code>style.css</code>. Press Ctrl+F5</td>
+</tr>
+</tbody>
+</table></div></article>
+    <div class="pager"><a class="prev" href="07-roadmap-and-open-questions.html"><small>&larr; Previous</small><br>7. Roadmap and open questions</a><span></span></div>
+  </main>
+  <aside class="otp"><div class="tree-h">On this page</div><a href="#quick-start-nothing-to-configure">Quick start (nothing to configure)</a><a href="#try-it">Try it</a><a href="#where-data-lives">Where data lives</a><a href="#tests">Tests</a><a href="#api-reference">API reference</a><a href="#troubleshooting">Troubleshooting</a></aside>
+</div>
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({startOnLoad: false, theme: "neutral", securityLevel: "loose", flowchart: {htmlLabels: true, curve: "basis"}});
+  mermaid.run({querySelector: "pre.mermaid"});
+</script>
+</body>
+</html>
